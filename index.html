@@ -101,37 +101,69 @@ td.r,th.r{text-align:right}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:.88rem}
 @media (max-width:480px){.scale button{font-size:.6rem;border-radius:4px}.scale{gap:2px}.card{padding:14px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.treewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:8px}
+.tree{display:block;width:100%;min-width:480px;height:auto}
+.tree .edge{fill:none;stroke:var(--muted);stroke-width:1}
+.tree .node{stroke:var(--accent);stroke-width:1}
+.tree .node.d0{fill:var(--accent)}
+.tree .node.d1{fill:var(--accent-weak)}
+.tree .node.d2{fill:var(--surface)}
+.tree .label{font-family:var(--body);font-size:12px;fill:var(--fg)}
+.tree .label.d0{fill:var(--accent-fg);font-weight:600;font-size:11.5px}
+.tree .label.d1{font-weight:600}
+.treehead{position:relative;height:18px;min-width:480px;font-size:.72rem;color:var(--muted);letter-spacing:.06em}
+.treehead span{position:absolute;text-align:center}
+.wbars{display:flex;flex-direction:column;gap:6px}
+.wrow{display:grid;grid-template-columns:minmax(80px,9em) 1fr 4em;gap:10px;align-items:center}
+.wrow .wname{font-size:.88rem;min-width:0}
+tr.strong td{font-weight:600}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header style="display:flex;flex-direction:column;gap:6px">
     <span class="eyebrow">서울대학교 농경제사회학부 · 농촌진흥청 연구과제</span>
-    <h1>농가 단위 환경·경제·사회 평가체계 가중치 설문</h1>
+    <h1>농가 단위 환경·사회·경제 평가체계 가중치 설문</h1>
   </header>
-  <main id="survey"></main>
+  <main id="survey" class="wrap" style="gap:16px;width:100%"></main>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script>
-/* ===== 설정: 구글 Apps Script 웹 앱 주소를 따옴표 안에 붙여 넣으세요 ===== */
+/* ===== 설정 ===== */
 const SCRIPT_URL = "https://script.google.com/a/macros/snu.ac.kr/s/AKfycbxjb7cBOST-OreiyItTqhj4q3BQ-C5uA6l-mt8g34uAMgDhSBoEErtmk36oQLsa7xoY1g/exec";
-/* ===== 문항 구성: 항목 이름이나 개수를 바꾸면 화면과 계산이 함께 바뀝니다 (Code.gs의 GROUPS도 똑같이 맞춰 주세요) ===== */
-const GROUPS = [
-  {id:"P", title:"부문 간 비교", parent:"평가체계 전체", q:"지속가능한 농가 평가에서, 두 부문 중 어느 쪽이 얼마나 더 중요합니까?", items:["환경","사회","경제"]},
-  {id:"E", title:"환경 부문", parent:"환경", q:"환경 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["토양","수질","대기","생태"]},
-  {id:"S", title:"사회 부문", parent:"사회", q:"사회 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["인적 기반","영농 활동 기반","지역사회 기반"]},
-  {id:"C", title:"경제 부문", parent:"경제", q:"경제 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["수익성","생산성","안정성"]},
-];
-const PILLAR_OF = {E:0,S:1,C:2};
-const RI = [0,0,0,0.58,0.90,1.12,1.24,1.32,1.41,1.45];
-const INTENSITY = {1:"동등",2:"동등~약간",3:"약간 더",4:"약간~상당히",5:"상당히 더",6:"상당히~매우",7:"매우 더",8:"매우~절대적으로",9:"절대적으로 더"};
-const STEPS = ["응답자 정보","부문","환경","사회","경제","확인"];
-const DRAFT_KEY = "ahp-farm-draft-v1";
 
-/* ---------- AHP math ---------- */
+/* ===== 평가 계층 =====
+   항목을 추가·삭제하거나 한 단계 더 아래(지표)를 붙이려면 children만 고치면 됩니다.
+   Code.gs의 TREE도 똑같이 맞춰 주세요. id는 한 번 정하면 바꾸지 마세요. */
+const TREE = {id:"G", name:"농가 단위 가치 평가", children:[
+  {id:"E", name:"환경", children:[{id:"E1",name:"토양"},{id:"E2",name:"수질"},{id:"E3",name:"대기"},{id:"E4",name:"생태"}]},
+  {id:"S", name:"사회", children:[{id:"S1",name:"인적 기반"},{id:"S2",name:"영농 활동 기반"},{id:"S3",name:"지역사회 기반"}]},
+  {id:"C", name:"경제", children:[{id:"C1",name:"수익성"},{id:"C2",name:"생산성"},{id:"C3",name:"안정성"}]},
+]};
+
+/* ---------- 계층 → 비교 묶음 ---------- */
+const NODES = {};
+(function walk(n, parent, depth){ n.parent=parent; n.depth=depth; NODES[n.id]=n; (n.children||[]).forEach(c=>walk(c,n,depth+1)); })(TREE,null,0);
+const GROUPS = [];
+(function collect(n){ if(n.children && n.children.length>=2){
+  const isTop = n.depth===0;
+  GROUPS.push({id:n.id, node:n, items:n.children.map(c=>c.name),
+    title: isTop ? "부문 간 비교" : (n.depth===1 ? `${n.name} 부문` : n.name),
+    parentLabel: isTop ? "평가체계 전체" : n.name,
+    q: isTop ? "농가의 가치를 평가할 때, 두 부문 중 어느 쪽이 더 중요하다고 보십니까?"
+             : (n.depth===1 ? `${n.name} 부문 안에서, 두 요소 중 어느 쪽이 더 중요하다고 보십니까?`
+                            : `'${n.name}'을(를) 평가할 때, 두 요소 중 어느 쪽이 더 중요하다고 보십니까?`)});
+  } (n.children||[]).forEach(collect); })(TREE);
+
+const RI = [0,0,0,0.58,0.90,1.12,1.24,1.32,1.41,1.45,1.49,1.51,1.48,1.56,1.57,1.59];
+const INTENSITY = {1:"동등하게",2:"동등~약간 더",3:"약간 더",4:"약간~상당히 더",5:"상당히 더",6:"상당히~매우 더",7:"매우 더",8:"매우~극히 더",9:"극히 더"};
+const STEPS = ["시작", ...GROUPS.map(g=>g.title), "확인"];
+const DRAFT_KEY = "ahp-farm-draft-v2";
+
+/* ---------- AHP 계산 ---------- */
 const pairs = n => { const p=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) p.push([i,j]); return p; };
 const sToA = s => s<9 ? 10-s : s===9 ? 1 : 1/(s-8);
-function aToS(a){ if(a>=1){ return 10-Math.min(9,Math.max(1,Math.round(a))); } return 8+Math.min(9,Math.max(2,Math.round(1/a))); }
 function matrixFrom(n, getA){ const A=[...Array(n)].map(()=>Array(n).fill(1)); for(const [i,j] of pairs(n)){ const a=getA(i,j); A[i][j]=a; A[j][i]=1/a; } return A; }
 function analyze(A){
   const n=A.length;
@@ -142,63 +174,96 @@ function analyze(A){
   const CI=n>2?(lam-n)/(n-1):0; const CR=n>2?CI/RI[n]:0;
   return {w,lam,CI,CR:Math.max(0,CR)};
 }
-function worstPair(A,w){
-  let best=null; for(const [i,j] of pairs(A.length)){ const e=Math.abs(Math.log(A[i][j]*w[j]/w[i])); if(!best||e>best.e) best={i,j,e,target:w[i]/w[j]}; } return best;
-}
-const groupS = (gs,g) => pairs(g.items.length).every(([i,j])=>gs.s[i+"-"+j]);
-function groupResult(g, gs){
-  if(!gs || !groupS(gs,g)) return null;
-  const A=matrixFrom(g.items.length,(i,j)=>sToA(gs.s[i+"-"+j]));
-  return {A,...analyze(A)};
+function worstPair(A,w){ let best=null; for(const [i,j] of pairs(A.length)){ const e=Math.abs(Math.log(A[i][j]*w[j]/w[i])); if(!best||e>best.e) best={i,j,e,target:w[i]/w[j]}; } return best; }
+const groupDone = (gs,g) => pairs(g.items.length).every(([i,j])=>gs && gs.s[i+"-"+j]);
+function groupResult(g, gs){ if(!groupDone(gs,g)) return null; const A=matrixFrom(g.items.length,(i,j)=>sToA(gs.s[i+"-"+j])); return {A,...analyze(A)}; }
+function globalWeights(groupsState){
+  const out={}; out[TREE.id]=1; const local={};
+  (function go(n){ const g=GROUPS.find(x=>x.id===n.id);
+    if(n.children){ let r=null;
+      if(g) r=groupResult(g,groupsState[g.id]);
+      n.children.forEach((c,i)=>{ const lw = n.children.length===1 ? 1 : (r ? r.w[i] : NaN); local[c.id]=lw; out[c.id]=out[n.id]*lw; go(c); }); }
+  })(TREE);
+  return {global:out, local};
 }
 
-/* ---------- state ---------- */
-function freshState(){ const g={}; for(const G of GROUPS) g[G.id]={rank:G.items.map((_,i)=>i),s:{},blocked:0,override:false}; return {step:0,info:{name:"",org:"",sector:""},g,submitted:false}; }
+/* ---------- 상태 ---------- */
+function freshState(){ const g={}; for(const G of GROUPS) g[G.id]={s:{},blocked:0,override:false}; return {step:0,evaluator:"",g,submitted:false}; }
 let S = freshState();
-try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(d && d.g && d.info) S={...S,...d}; }catch(e){}
+try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(d && d.g){ S={...S,...d}; for(const G of GROUPS) if(!S.g[G.id]) S.g[G.id]=freshState().g[G.id]; } }catch(e){}
 function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY,JSON.stringify(S)); }catch(e){} }
 
-let TOKEN = null;
-try{ TOKEN = localStorage.getItem("ahp-farm-token"); if(!TOKEN){ TOKEN = "r-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8); localStorage.setItem("ahp-farm-token",TOKEN); } }catch(e){ TOKEN = "r-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8); }
 const $ = id => document.getElementById(id);
 const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag); for(const [k,v] of Object.entries(attrs)){ if(k==="class") e.className=v; else if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else if(v===true) e.setAttribute(k,""); else if(v!==false && v!=null) e.setAttribute(k,v); } for(const k of kids.flat()){ if(k==null) continue; e.append(k.nodeType?k:document.createTextNode(String(k))); } return e; };
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2400); }
 const fmt = (x,d=3) => Number.isFinite(x)?x.toFixed(d):"–";
+const pct = x => Number.isFinite(x)?(x*100).toFixed(1)+"%":"–";
+const go = step => { S.step=step; saveDraft(); render(); window.scrollTo(0,0); };
 
-/* ---------- survey render ---------- */
+/* ---------- 계층도 ---------- */
+function hierarchySVG(){
+  const NS="http://www.w3.org/2000/svg";
+  const leaves=[]; (function L(n){ if(!n.children) leaves.push(n); else n.children.forEach(L); })(TREE);
+  const maxDepth=Math.max(...Object.values(NODES).map(n=>n.depth));
+  const rowH=34, padY=10, boxH=26;
+  const colW=[150,110,...Array(Math.max(0,maxDepth-1)).fill(130)];
+  const gap=34;
+  const xs=[0]; for(let d=1; d<=maxDepth; d++) xs[d]=xs[d-1]+colW[d-1]+gap;
+  const W=xs[maxDepth]+colW[maxDepth]+2, H=leaves.length*rowH+padY*2;
+  const pos={};
+  leaves.forEach((n,i)=>pos[n.id]={y:padY+i*rowH+rowH/2});
+  (function Y(n){ if(n.children){ n.children.forEach(Y); pos[n.id]={y:(pos[n.children[0].id].y+pos[n.children[n.children.length-1].id].y)/2}; } })(TREE);
+  const svg=document.createElementNS(NS,"svg"); svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.setAttribute("class","tree"); svg.setAttribute("role","img"); svg.setAttribute("aria-label","평가 계층도");
+  const mk=(t,a)=>{ const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); return e; };
+  for(const n of Object.values(NODES)) if(n.children){
+    const x1=xs[n.depth]+colW[n.depth], xm=x1+gap/2, x2=xs[n.depth+1];
+    svg.append(mk("path",{d:`M${x1} ${pos[n.id].y}H${xm}`,class:"edge"}));
+    const ys=n.children.map(c=>pos[c.id].y);
+    svg.append(mk("path",{d:`M${xm} ${Math.min(...ys)}V${Math.max(...ys)}`,class:"edge"}));
+    n.children.forEach(c=>svg.append(mk("path",{d:`M${xm} ${pos[c.id].y}H${x2}`,class:"edge"})));
+  }
+  for(const n of Object.values(NODES)){
+    const x=xs[n.depth], w=colW[n.depth], y=pos[n.id].y;
+    svg.append(mk("rect",{x, y:y-boxH/2, width:w, height:boxH, rx:5, class:"node d"+Math.min(n.depth,2)}));
+    const t=mk("text",{x:x+w/2, y:y+4.5, "text-anchor":"middle", class:"label d"+Math.min(n.depth,2)});
+    t.textContent=n.name; svg.append(t);
+  }
+  const heads=["목표","부문","요소","세부 지표"];
+  return el("div",{class:"field"},
+    el("div",{class:"treehead"}, ...Array.from({length:maxDepth+1},(_,d)=>el("span",{style:`left:${(xs[d]/W*100).toFixed(2)}%;width:${(colW[d]/W*100).toFixed(2)}%`},heads[d]||`${d}계층`))),
+    el("div",{class:"treewrap"},svg));
+}
+
+/* ---------- 화면 ---------- */
 function rail(){ return el("div",{class:"rail"}, STEPS.map((s,i)=>el("span",{class:i===S.step?"on":i<S.step?"done":""},s))); }
-
-function renderSurvey(){
+function render(){
   const root=$("survey"); root.replaceChildren();
-  const box=el("div",{class:"wrap",style:"gap:16px"}); root.append(box);
-  if(S.submitted){ box.append(doneView()); return; }
-  box.append(rail());
-  if(S.step===0) box.append(introView());
-  else if(S.step<=GROUPS.length) box.append(groupView(GROUPS[S.step-1]));
-  else box.append(reviewView());
+  if(S.submitted){ root.append(doneView()); return; }
+  root.append(rail());
+  if(S.step===0) root.append(introView());
+  else if(S.step<=GROUPS.length) root.append(groupView(GROUPS[S.step-1]));
+  else root.append(reviewView());
 }
 
 function introView(){
   const c=el("div",{class:"card"});
+  const total=GROUPS.reduce((a,g)=>a+pairs(g.items.length).length,0);
   c.append(
-    el("p",{},"본 설문은 개별 농가의 환경·경제·사회 부문 가치를 평가하기 위해, 각 평가 요소의 상대적 중요도(가중치)를 전문가 판단으로 산출하는 AHP(계층분석법) 조사입니다."),
-    el("p",{class:"muted small"},"두 요소를 짝지어 어느 쪽이 얼마나 더 중요한지 고르시면 됩니다. 비교 묶음은 4개, 문항은 모두 15개이며 약 10분이 걸립니다. 응답이 서로 모순되면 화면에서 바로 알려드립니다."),
+    el("p",{},"본 설문은 개별 농가의 환경·사회·경제 부문 가치를 평가하기 위해, 각 평가 요소의 상대적 중요도(가중치)를 전문가 판단으로 산출하는 AHP(계층분석법) 조사입니다."),
+    el("h2",{},"평가 계층"),
+    hierarchySVG(),
+    el("p",{class:"muted small"},`같은 상위 항목 아래의 요소끼리 두 개씩 짝지어 비교합니다. 비교 묶음은 ${GROUPS.length}개, 문항은 모두 ${total}개입니다. 응답하신 값으로 계산한 하위 요소의 가중치는 상위 항목의 가중치와 곱해져 최종 가중치가 됩니다.`),
   );
-  const key=el("div",{class:"field"}, el("span",{class:"eyebrow"},"척도 읽는 법"),
-    el("div",{class:"scalekey"}, ["1 동등","3 약간 더","5 상당히 더","7 매우 더","9 절대적으로 더"].map(t=>el("div",{},t))),
+  c.append(el("div",{class:"field"}, el("span",{class:"eyebrow"},"척도 읽는 법"),
+    el("div",{class:"scalekey"}, ["1 동등","3 약간 더","5 상당히 더","7 매우 더","9 극히 더"].map(t=>el("div",{},t))),
     el("p",{class:"muted small"},"2·4·6·8은 그 사이 값입니다. 가운데(1)에서 더 중요한 쪽으로 갈수록 숫자가 커집니다."),
-    el("p",{class:"small"},el("b",{},"숫자는 '몇 배'라는 뜻이라 서로 곱해집니다. "),"A가 B보다 3, B가 C보다 3이면 A는 C보다 9가 되어야 합니다. 1위와 2위처럼 이웃한 순위끼리는 작은 숫자를 쓰시면 응답이 서로 잘 맞습니다."));
-  const name=el("input",{type:"text",id:"in-name",value:S.info.name,autocomplete:"name",oninput:e=>{S.info.name=e.target.value;saveDraft();check();}});
-  const org=el("input",{type:"text",id:"in-org",value:S.info.org,oninput:e=>{S.info.org=e.target.value;saveDraft();}});
-  const seg=el("div",{class:"seg",role:"group","aria-label":"소속 구분"}, ["산업계","학계","연구기관","공공·행정","기타"].map(v=>el("button",{type:"button","aria-pressed":String(S.info.sector===v),onclick:()=>{S.info.sector=v;saveDraft();renderSurvey();}},v)));
-  const next=el("button",{class:"btn",id:"btn-next0",onclick:()=>{S.step=1;saveDraft();renderSurvey();window.scrollTo(0,0);}},"설문 시작");
-  function check(){ next.disabled=!(S.info.name.trim() && S.info.sector); }
+    el("p",{class:"small"},"숫자는 '몇 배 더 중요한가'로 계산됩니다. 그래서 A가 B보다 3, B가 C보다 3만큼 중요하다고 답하시면 A는 C보다 9만큼 중요한 것으로 이어집니다. 응답이 서로 크게 어긋나면 화면에서 알려 드립니다.")));
+  const num=el("input",{type:"text",id:"in-evaluator",value:S.evaluator,autocomplete:"off",placeholder:"예: P01",oninput:e=>{S.evaluator=e.target.value;saveDraft();check();}});
+  const next=el("button",{class:"btn",onclick:()=>go(1)},"설문 시작");
+  function check(){ next.disabled=!S.evaluator.trim(); }
   check();
-  c.append(key,
-    el("div",{class:"field"},el("label",{for:"in-name"},"성함"),name),
-    el("div",{class:"field"},el("label",{for:"in-org"},"소속 기관 (선택)"),org),
-    el("div",{class:"field"},el("label",{},"소속 구분"),seg),
-    el("div",{class:"btns"},el("span",{class:"muted small"},"응답은 연구 목적으로만 사용됩니다."),next));
+  c.append(el("div",{class:"field"},el("label",{for:"in-evaluator"},"평가자 번호"),num,el("span",{class:"muted small"},"안내받은 번호를 입력해 주세요. 응답은 이름 없이 번호로만 저장됩니다.")),
+    el("div",{class:"btns",style:"justify-content:flex-end"},next));
   return c;
 }
 
@@ -206,147 +271,113 @@ function groupView(g){
   const gs=S.g[g.id], n=g.items.length;
   const c=el("div",{class:"card"});
   c.append(el("div",{class:"field",style:"gap:2px"},
-    el("span",{class:"eyebrow"},`${S.step} / ${GROUPS.length} · 상위 요소: ${g.parent}`),
-    el("h2",{},g.title)));
+    el("span",{class:"eyebrow"},`${S.step} / ${GROUPS.length} · 상위 항목: ${g.parentLabel}`), el("h2",{},g.title)));
 
-  // ranking
-  const ol=el("ol");
-  gs.rank.forEach((idx,pos)=>{
-    ol.append(el("li",{},
-      el("span",{class:"pos"},`${pos+1}위`), el("span",{class:"name"},g.items[idx]),
-      el("button",{type:"button","aria-label":`${g.items[idx]} 위로`,disabled:pos===0,onclick:()=>{const r=gs.rank;[r[pos-1],r[pos]]=[r[pos],r[pos-1]];saveDraft();renderSurvey();}},"↑"),
-      el("button",{type:"button","aria-label":`${g.items[idx]} 아래로`,disabled:pos===n-1,onclick:()=>{const r=gs.rank;[r[pos+1],r[pos]]=[r[pos],r[pos+1]];saveDraft();renderSurvey();}},"↓")));
-  });
-  c.append(el("div",{class:"rank"}, el("p",{class:"small"},el("b",{},"먼저 중요한 순서대로 정렬해 주세요. "),el("span",{class:"muted"},"아래 비교는 이 순서대로, 순위가 높은 요소를 왼쪽에 두고 나옵니다.")), ol));
-
-  c.append(el("p",{style:"font-weight:500"},g.q));
+  c.append(el("p",{style:"font-weight:500"},g.q), el("p",{class:"muted small"},"9 극히 · 7 매우 · 5 상당히 · 3 약간 · 1 동등"));
   const res=groupResult(g,gs);
   const bad = res && res.CR>0.1 ? worstPair(res.A,res.w) : null;
-  const rankPos = {}; gs.rank.forEach((idx,p)=>rankPos[idx]=p);
-
-  // 순위대로 정렬: 이웃한 순위끼리 먼저, 먼 순위는 나중에. 왼쪽에는 늘 순위가 높은 요소를 둔다.
-  const order = pairs(n).map(([i,j])=>{ const flip=rankPos[i]>rankPos[j]; return {i,j,flip,L:flip?j:i,R:flip?i:j,dist:Math.abs(rankPos[i]-rankPos[j]),pos:Math.min(rankPos[i],rankPos[j])}; })
-    .sort((a,b)=>a.dist-b.dist||a.pos-b.pos);
-  const ratio=(x,y)=>{ const a=Math.min(x,y), b=Math.max(x,y), s=gs.s[a+"-"+b]; if(!s) return null; const v=sToA(s); return x===a?v:1/v; };
-
-  for(const q of order){
-    const {i,j,flip,L,R}=q;
-    const key=i+"-"+j, cur=gs.s[key];
-    const dcur = cur ? (flip?18-cur:cur) : null;
-    const setK = k => { gs.s[key]= flip?18-k:k; saveDraft(); renderSurvey(); };
+  for(const [i,j] of pairs(n)){
+    const L=i, R=j, key=i+"-"+j, cur=gs.s[key], dcur=cur||null;
+    const setK = k => { gs.s[key]=k; saveDraft(); render(); };
     const isBad = bad && bad.i===i && bad.j===j;
     const scale=el("div",{class:"scale",role:"radiogroup","aria-label":`${g.items[L]} 대 ${g.items[R]}`});
-    for(let k=1;k<=17;k++){
-      const v = k<=9 ? 10-k : k-8;
+    for(let k=1;k<=17;k++){ const v=k<=9?10-k:k-8;
       scale.append(el("button",{type:"button",class:(v%2?"odd ":"")+(k===9?"mid":""),"aria-pressed":String(dcur===k),
-        "aria-label": v===1?"동등":(k<9?`${g.items[L]} ${v}`:`${g.items[R]} ${v}`), onclick:()=>setK(k)}, v));
-    }
+        "aria-label":v===1?"동등":(k<9?`${g.items[L]} ${v}`:`${g.items[R]} ${v}`),onclick:()=>setK(k)},v)); }
     let read="";
     if(dcur){ const v=dcur<=9?10-dcur:dcur-8; read = v===1 ? "두 요소가 동등하게 중요" : `${dcur<9?g.items[L]:g.items[R]}이(가) ${INTENSITY[v]} 중요 (${v})`; }
     const p=el("div",{class:"pair"+(isBad?" bad":"")},
-      el("div",{class:"ends"},el("span",{},`← ${g.items[L]}`),el("span",{},`${g.items[R]} →`)),
-      scale, el("div",{class:"readout"},read));
-    if(dcur && dcur>9) p.append(el("div",{class:"hint"},"위에서 정한 순위와 반대 방향입니다. 의도하신 것이 맞는지 확인해 주세요."));
-
-    // 다른 문항의 응답으로 본 이 비교의 '자연스러운' 값
-    const others=[...Array(n).keys()].filter(k=>k!==i&&k!==j);
-    const chain=others.map(k=>{ const a=ratio(L,k), b=ratio(k,R); return a&&b?a*b:null; }).filter(x=>x);
-    const imp = chain.length===others.length ? Math.exp(chain.reduce((acc,x)=>acc+Math.log(x),0)/chain.length) : null;
-    if(imp){
-      const ts=aToS(imp), tv=ts<=9?10-ts:ts-8;
-      const impTxt = tv===1 ? "두 요소가 비슷하게 중요" : `${ts<9?g.items[L]:g.items[R]}이(가) ${tv} 정도 더 중요`;
-      const lab = tv===1 ? "동등(1)" : `${ts<9?g.items[L]:g.items[R]} ${tv}`;
-      const fixBtn = el("div",{},el("button",{type:"button",class:"btn ghost",style:"padding:4px 12px;font-size:.85rem",onclick:()=>setK(ts)},`${lab}(으)로 정하기`));
-      if(imp>9.5 && q.dist>=2){
-        p.append(el("div",{class:"hint"},`앞의 응답대로라면 ${g.items[L]}이(가) ${g.items[R]}보다 약 ${Math.round(imp)}배 중요해야 하는데, 척도는 9까지라 맞출 수 없어요. 위쪽 이웃한 순위끼리의 비교 숫자를 조금 줄여 주세요.`));
-      } else if(isBad){
-        const flipDir = (dcur<9 && ts>9) || (dcur>9 && ts<9);
-        p.append(el("div",{class:"hint"},`다른 문항의 응답대로라면 ${impTxt}해야 자연스럽습니다. ${flipDir?"지금은 방향이 반대로 선택되어 있어요.":"지금 선택과 정도 차이가 커요."}`), fixBtn);
-      } else if(q.dist>=2 && !cur){
-        p.append(el("div",{class:"readout"},`참고: 위의 응답대로라면 ${impTxt}합니다.`), fixBtn);
-      }
+      el("div",{class:"ends"},el("span",{},`← ${g.items[L]}`),el("span",{},`${g.items[R]} →`)), scale, el("div",{class:"readout"},read));
+    if(isBad){
+      const natural = bad.target>=1 ? i : j;          // 나머지 응답이 가리키는 더 중요한 쪽
+      const chosen  = cur<9 ? i : cur>9 ? j : -1;
+      const msg = chosen!==-1 && chosen!==natural ? "다른 문항의 응답과 비교하면 이 문항의 방향이 반대로 보입니다." : "다른 문항의 응답과 가장 크게 어긋나는 문항입니다.";
+      p.append(el("div",{class:"hint"},`${msg} 이 문항이나 관련된 다른 문항을 다시 검토해 주세요.`));
     }
     c.append(p);
   }
 
-  // status
   const answered=pairs(n).filter(([i,j])=>gs.s[i+"-"+j]).length, total=pairs(n).length;
   let status;
   if(!res) status=el("div",{class:"status wait"},`${answered} / ${total} 문항 응답`);
-  else if(res.CR<=0.1) status=el("div",{class:"status ok"},el("span",{},el("b",{},"일관성 양호 "),el("span",{class:"num"},`CR ${fmt(res.CR)}`)),el("span",{class:"small muted"},"응답들이 서로 잘 맞습니다."));
+  else if(n<=2) status=el("div",{class:"status ok"},el("b",{},"응답 완료"));
+  else if(res.CR<=0.1) status=el("div",{class:"status ok"},el("span",{},el("b",{},"일관성 양호 "),el("span",{class:"num"},`CR ${fmt(res.CR)}`)));
   else status=el("div",{class:"status bad"},el("span",{},el("b",{},"일관성 부족 "),el("span",{class:"num"},`CR ${fmt(res.CR)} (기준 0.1 이하)`)),
-    el("span",{class:"small"},"예를 들어 A가 B보다, B가 C보다 중요하다고 하셨다면 A는 C보다 더 중요해야 합니다. 표시된 문항을 바꾸거나, 다른 문항을 고쳐도 됩니다."));
+    el("span",{class:"small"},"A가 B보다, B가 C보다 중요하다고 하셨다면 A는 C보다 더 중요해야 자연스럽습니다. 표시된 문항을 중심으로 응답을 다시 살펴봐 주세요."));
   c.append(status);
 
-  const back=el("button",{class:"btn ghost",onclick:()=>{S.step--;saveDraft();renderSurvey();window.scrollTo(0,0);}},"이전");
   const next=el("button",{class:"btn",disabled:!res},"다음");
-  const right=el("div",{class:"btns",style:"justify-content:flex-end"});
   next.onclick=()=>{
-    if(res.CR>0.1 && !gs.override){ gs.blocked++; saveDraft(); renderSurvey(); toast("표시된 문항을 다시 검토해 주세요"); return; }
+    if(n>2 && res.CR>0.1 && !gs.override){ gs.blocked++; saveDraft(); render(); toast("표시된 문항을 다시 검토해 주세요"); return; }
     if(res.CR<=0.1) gs.override=false;
-    S.step++; saveDraft(); renderSurvey(); window.scrollTo(0,0);
+    go(S.step+1);
   };
-  if(res && res.CR>0.1 && gs.blocked>0){
-    right.append(el("button",{class:"btn link",onclick:()=>{gs.override=true;S.step++;saveDraft();renderSurvey();window.scrollTo(0,0);}},"검토했습니다. 현재 응답으로 진행"));
-  }
+  const right=el("div",{class:"btns",style:"justify-content:flex-end"});
+  if(res && n>2 && res.CR>0.1 && gs.blocked>0)
+    right.append(el("button",{class:"btn link",onclick:()=>{gs.override=true;go(S.step+1);}},"검토했습니다. 현재 응답으로 진행"));
   right.append(next);
-  c.append(el("div",{class:"btns"},back,right));
+  c.append(el("div",{class:"btns"},el("button",{class:"btn ghost",onclick:()=>go(S.step-1)},"이전"),right));
   return c;
+}
+
+function weightTable(gw){
+  const t=el("table",{},el("tr",{},el("th",{},"항목"),el("th",{class:"r"},"상위 항목 안 비중"),el("th",{class:"r"},"최종 가중치"),el("th",{})));
+  const max=Math.max(...Object.entries(gw.global).filter(([id])=>!NODES[id].children).map(([,v])=>v||0));
+  (function rows(n){ for(const c of n.children||[]){
+    const leaf=!c.children;
+    t.append(el("tr",{class:leaf?"":"strong"},
+      el("td",{style:`padding-left:${8+ (c.depth-1)*18}px`},c.name),
+      el("td",{class:"r num"},pct(gw.local[c.id])), el("td",{class:"r num"},fmt(gw.global[c.id],4)),
+      el("td",{style:"width:28%"}, leaf?el("div",{class:"bar"},el("i",{style:`width:${((gw.global[c.id]||0)/max*100).toFixed(1)}%`})):null)));
+    rows(c); } })(TREE);
+  return el("div",{class:"tablewrap"},t);
 }
 
 function reviewView(){
   const c=el("div",{class:"card"});
-  c.append(el("h2",{},"응답 확인"), el("p",{class:"muted small"},"아래는 응답으로 계산된 본인의 가중치입니다. 수정하려면 해당 단계로 돌아가세요."));
-  GROUPS.forEach((g,gi)=>{
-    const r=groupResult(g,S.g[g.id]);
-    const tb=el("table",{},el("tr",{},el("th",{},g.title),el("th",{class:"r"},"가중치"),el("th",{})));
-    g.items.forEach((it,i)=>tb.append(el("tr",{},el("td",{},it),el("td",{class:"r num"},fmt(r.w[i])),el("td",{style:"width:45%"},el("div",{class:"bar"},el("i",{style:`width:${(r.w[i]*100).toFixed(1)}%`}))))));
-    const pill = r.CR<=0.1?el("span",{class:"pill ok"},`CR ${fmt(r.CR)}`):el("span",{class:"pill bad"},`CR ${fmt(r.CR)}`);
-    c.append(el("div",{class:"field"},el("div",{class:"btns"},pill,el("button",{class:"btn ghost",style:"padding:4px 12px",onclick:()=>{S.step=gi+1;saveDraft();renderSurvey();}},"수정")),el("div",{class:"tablewrap"},tb)));
-  });
-  const msg=el("div",{});
-  const submit=el("button",{class:"btn",id:"btn-submit"},"제출하기");
+  c.append(el("h2",{},"응답 확인"), el("p",{class:"muted small"},"응답으로 계산된 본인의 가중치입니다. 최종 가중치는 상위 항목의 가중치에 상위 항목 안 비중을 곱한 값이며, 맨 아래 요소의 최종 가중치를 모두 더하면 1이 됩니다."));
+  c.append(weightTable(globalWeights(S.g)));
+  const crList=el("div",{class:"btns",style:"justify-content:flex-start;gap:6px"});
+  GROUPS.forEach((g,gi)=>{ const r=groupResult(g,S.g[g.id]); const ok=g.items.length<=2||r.CR<=0.1;
+    crList.append(el("button",{class:"pill "+(ok?"ok":"bad"),style:"border:0;cursor:pointer",onclick:()=>go(gi+1)},`${g.title}${g.items.length>2?" · CR "+fmt(r.CR):""}`)); });
+  c.append(el("div",{class:"field"},el("span",{class:"eyebrow"},"묶음별 일관성 (누르면 수정)"),crList));
+  const submit=el("button",{class:"btn"},"제출하기");
   submit.onclick=async()=>{
     submit.disabled=true; submit.textContent="제출 중…";
-    const payload=buildPayload();
-    let ok=false;
-    try{
-      const res = await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify({...payload,token:TOKEN})});
-      const out = await res.json(); ok = !!(out && out.ok);
-    }catch(e){ ok=false; }
-    S.submitted=true; S.via= ok ? "db" : "code"; if(!ok) S.code=encodePayload({...payload,token:TOKEN});
-    saveDraft(); renderSurvey(); window.scrollTo(0,0);
+    const payload=buildPayload(); let ok=false;
+    try{ const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(payload)}); const out=await res.json(); ok=!!(out&&out.ok); }catch(e){ ok=false; }
+    S.submitted=true; S.via=ok?"sheet":"code"; if(!ok) S.code=encodePayload(payload);
+    saveDraft(); render(); window.scrollTo(0,0);
   };
-  c.append(msg, el("div",{class:"btns"},el("button",{class:"btn ghost",onclick:()=>{S.step--;saveDraft();renderSurvey();}},"이전"),submit));
+  c.append(el("div",{class:"btns"},el("button",{class:"btn ghost",onclick:()=>go(S.step-1)},"이전"),submit));
   return c;
 }
 
 function buildPayload(){
   const groups={};
-  for(const g of GROUPS){ const gs=S.g[g.id], r=groupResult(g,gs); groups[g.id]={s:{...gs.s},rank:[...gs.rank],cr:+r.CR.toFixed(4),override:!!gs.override,blocked:gs.blocked}; }
-  return {schema:1,name:S.info.name.trim(),org:S.info.org.trim(),sector:S.info.sector,groups,submittedAt:new Date().toISOString()};
+  for(const g of GROUPS){ const gs=S.g[g.id], r=groupResult(g,gs); groups[g.id]={s:{...gs.s},cr:+r.CR.toFixed(4),override:!!gs.override,blocked:gs.blocked}; }
+  return {schema:2,evaluator:S.evaluator.trim(),groups,submittedAt:new Date().toISOString()};
 }
-const encodePayload = p => "AHP1:"+btoa(unescape(encodeURIComponent(JSON.stringify(p))));
-function decodePayload(t){ t=t.trim(); if(!t.startsWith("AHP1:")) throw new Error("형식"); return JSON.parse(decodeURIComponent(escape(atob(t.slice(5))))); }
+const encodePayload = p => "AHP2:"+btoa(unescape(encodeURIComponent(JSON.stringify(p))));
 
 function doneView(){
   const c=el("div",{class:"card"});
-  if(S.via==="db"){
-    c.append(el("h2",{},"제출되었습니다"),el("p",{},`${S.info.name} 님, 응답해 주셔서 감사합니다.`),el("p",{class:"muted small"},"수정이 필요하시면 아래 버튼으로 응답을 고쳐 다시 제출하실 수 있습니다. 다시 제출하면 이전 응답을 대체합니다."));
+  if(S.via==="sheet"){
+    c.append(el("h2",{},"제출되었습니다"),el("p",{},`평가자 ${S.evaluator} 님, 응답해 주셔서 감사합니다.`),
+      el("p",{class:"muted small"},"수정이 필요하시면 아래 버튼으로 응답을 고쳐 다시 제출하실 수 있습니다. 같은 평가자 번호로 다시 제출하면 이전 응답을 대체합니다."));
   } else {
-    const code=el("div",{class:"code",id:"code"},S.code);
+    const code=el("div",{class:"code"},S.code);
     const copy=el("button",{class:"btn"},"응답 코드 복사");
     copy.onclick=async()=>{ try{ await navigator.clipboard.writeText(S.code); toast("복사했습니다"); }catch(e){ const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast("코드를 선택했습니다. 복사해 주세요"); } };
     c.append(el("h2",{},"응답 코드를 보내 주세요"),
-      el("p",{},"네트워크 문제로 응답을 자동 저장하지 못했습니다. 아래 코드를 복사해 연구진에게 이메일이나 메신저로 보내 주시면 응답이 그대로 반영됩니다."),
-      code, el("div",{class:"btns"},el("span",{class:"muted small"},"코드에는 응답 내용이 모두 들어 있습니다."),copy));
+      el("p",{},"네트워크 문제로 응답을 자동 저장하지 못했습니다. 아래 코드를 복사해 연구진에게 보내 주시면 응답이 그대로 반영됩니다."),
+      code, el("div",{class:"btns",style:"justify-content:flex-end"},copy));
   }
-  c.append(el("div",{class:"btns",style:"justify-content:flex-start"},el("button",{class:"btn ghost",onclick:()=>{S.submitted=false;S.step=GROUPS.length+1;saveDraft();renderSurvey();}},"응답 수정하기")));
+  c.append(el("div",{class:"btns",style:"justify-content:flex-start"},el("button",{class:"btn ghost",onclick:()=>{S.submitted=false;go(GROUPS.length+1);}},"응답 수정하기")));
   return c;
 }
 
-
-renderSurvey();
+render();
 </script>
 </body>
 </html>
