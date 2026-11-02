@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>농가 평가체계 AHP 설문</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column; a stepper rail on top; each comparison is a ruled card with a 17-point scale. */
+:root{
+  --bg:#f4f6f2; --surface:#ffffff; --fg:#1c231e; --muted:#5b665e; --line:#dbe1d9;
+  --accent:#3d6a48; --accent-fg:#ffffff; --accent-weak:#e2ebe2;
+  --warn:#a9521c; --warn-bg:#f8e9df; --ok:#2e7a4c; --ok-bg:#e1f0e6;
+  --display:"Gowun Batang", "Noto Serif KR", serif;
+  --body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111512; --surface:#191f1b; --fg:#e4eae5; --muted:#99a59c; --line:#2b342e;
+  --accent:#86b691; --accent-fg:#0f1a12; --accent-weak:#22332670;
+  --warn:#e6955f; --warn-bg:#3a251a; --ok:#7fcb9b; --ok-bg:#1c3325; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111512; --surface:#191f1b; --fg:#e4eae5; --muted:#99a59c; --line:#2b342e;
+  --accent:#86b691; --accent-fg:#0f1a12; --accent-weak:#22332670;
+  --warn:#e6955f; --warn-bg:#3a251a; --ok:#7fcb9b; --ok-bg:#1c3325; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--display);font-weight:700;text-wrap:balance;margin:0;line-height:1.3}
+h1{font-size:1.7rem} h2{font-size:1.3rem}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.eyebrow{font-size:.75rem;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:0;padding:8px 12px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent);font-weight:600}
+.rail{display:flex;gap:6px;flex-wrap:wrap}
+.rail span{font-size:.78rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.rail span.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.rail span.done{color:var(--fg);border-color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:500;font-size:.9rem}
+input[type=text],select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%}
+textarea{min-height:90px;font-family:var(--mono);font-size:.8rem}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:7px 14px}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);border-radius:8px;padding:10px 18px;font-weight:600}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--fg);border-color:var(--line);font-weight:500}
+.btn.link{background:none;border:0;color:var(--warn);text-decoration:underline;padding:4px 0;font-weight:500}
+.scalekey{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:.78rem;color:var(--muted)}
+.scalekey div{border-top:2px solid var(--line);padding-top:4px}
+.rank{display:flex;flex-direction:column;gap:6px}
+.rank li{list-style:none;display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px 6px 12px}
+.rank ol{margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rank .pos{font-family:var(--mono);color:var(--accent);width:2.2em}
+.rank .name{flex:1;min-width:0}
+.rank button{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;width:32px;height:30px;padding:0}
+.rank button:disabled{opacity:.3}
+.pair{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.pair.bad{background:var(--warn-bg);border-radius:8px;padding:12px;border-top-color:transparent}
+.ends{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+.ends span:last-child{text-align:right}
+.scale{display:grid;grid-template-columns:repeat(17,minmax(0,1fr));gap:3px}
+.scale button{aspect-ratio:1/1.15;max-width:100%;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:5px;padding:0;font-family:var(--mono);font-size:.72rem}
+.scale button.odd{color:var(--fg)}
+.scale button.mid{border-color:var(--muted)}
+.scale button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.readout{font-size:.85rem;color:var(--muted);min-height:1.4em}
+.hint{font-size:.82rem;color:var(--warn)}
+.status{border-radius:8px;padding:12px 14px;font-size:.9rem;display:flex;flex-direction:column;gap:4px}
+.status.ok{background:var(--ok-bg);color:var(--fg)}
+.status.ok b{color:var(--ok)}
+.status.bad{background:var(--warn-bg)}
+.status.bad b{color:var(--warn)}
+.status.wait{background:var(--accent-weak);color:var(--muted)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:.78rem}
+td.r,th.r{text-align:right}
+.bar{height:8px;background:var(--accent-weak);border-radius:4px;min-width:60px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:4px}
+.pill{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:999px}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.bad{background:var(--warn-bg);color:var(--warn)}
+.pill.na{background:var(--accent-weak);color:var(--muted)}
+.code{font-family:var(--mono);font-size:.75rem;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:140px;overflow:auto;user-select:all}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat .v{font-family:var(--mono);font-size:1.3rem}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:.88rem}
+@media (max-width:480px){.scale button{font-size:.6rem;border-radius:4px}.scale{gap:2px}.card{padding:14px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <span class="eyebrow">서울대학교 농경제사회학부 · 농촌진흥청 연구과제</span>
+    <h1>농가 단위 환경·경제·사회 평가체계 가중치 설문</h1>
+  </header>
+  <main id="survey"></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script>
+/* ===== 설정: 구글 Apps Script 웹 앱 주소를 따옴표 안에 붙여 넣으세요 ===== */
+const SCRIPT_URL = "https://script.google.com/a/macros/snu.ac.kr/s/AKfycbxjb7cBOST-OreiyItTqhj4q3BQ-C5uA6l-mt8g34uAMgDhSBoEErtmk36oQLsa7xoY1g/exec";
+/* ===== 문항 구성: 항목 이름이나 개수를 바꾸면 화면과 계산이 함께 바뀝니다 (Code.gs의 GROUPS도 똑같이 맞춰 주세요) ===== */
+const GROUPS = [
+  {id:"P", title:"부문 간 비교", parent:"평가체계 전체", q:"지속가능한 농가 평가에서, 두 부문 중 어느 쪽이 얼마나 더 중요합니까?", items:["환경","사회","경제"]},
+  {id:"E", title:"환경 부문", parent:"환경", q:"환경 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["토양","수질","대기","생태"]},
+  {id:"S", title:"사회 부문", parent:"사회", q:"사회 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["인적 기반","영농 활동 기반","지역사회 기반"]},
+  {id:"C", title:"경제 부문", parent:"경제", q:"경제 부문 안에서, 두 원칙 중 어느 쪽이 얼마나 더 중요합니까?", items:["수익성","생산성","안정성"]},
+];
+const PILLAR_OF = {E:0,S:1,C:2};
+const RI = [0,0,0,0.58,0.90,1.12,1.24,1.32,1.41,1.45];
+const INTENSITY = {1:"동등",2:"동등~약간",3:"약간 더",4:"약간~상당히",5:"상당히 더",6:"상당히~매우",7:"매우 더",8:"매우~절대적으로",9:"절대적으로 더"};
+const STEPS = ["응답자 정보","부문","환경","사회","경제","확인"];
+const DRAFT_KEY = "ahp-farm-draft-v1";
+
+/* ---------- AHP math ---------- */
+const pairs = n => { const p=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) p.push([i,j]); return p; };
+const sToA = s => s<9 ? 10-s : s===9 ? 1 : 1/(s-8);
+function aToS(a){ if(a>=1){ return 10-Math.min(9,Math.max(1,Math.round(a))); } return 8+Math.min(9,Math.max(2,Math.round(1/a))); }
+function matrixFrom(n, getA){ const A=[...Array(n)].map(()=>Array(n).fill(1)); for(const [i,j] of pairs(n)){ const a=getA(i,j); A[i][j]=a; A[j][i]=1/a; } return A; }
+function analyze(A){
+  const n=A.length;
+  const gm=A.map(r=>Math.pow(r.reduce((x,y)=>x*y,1),1/n));
+  const s=gm.reduce((x,y)=>x+y,0); const w=gm.map(g=>g/s);
+  const Aw=A.map(r=>r.reduce((acc,v,j)=>acc+v*w[j],0));
+  const lam=Aw.reduce((acc,v,i)=>acc+v/w[i],0)/n;
+  const CI=n>2?(lam-n)/(n-1):0; const CR=n>2?CI/RI[n]:0;
+  return {w,lam,CI,CR:Math.max(0,CR)};
+}
+function worstPair(A,w){
+  let best=null; for(const [i,j] of pairs(A.length)){ const e=Math.abs(Math.log(A[i][j]*w[j]/w[i])); if(!best||e>best.e) best={i,j,e,target:w[i]/w[j]}; } return best;
+}
+const groupS = (gs,g) => pairs(g.items.length).every(([i,j])=>gs.s[i+"-"+j]);
+function groupResult(g, gs){
+  if(!gs || !groupS(gs,g)) return null;
+  const A=matrixFrom(g.items.length,(i,j)=>sToA(gs.s[i+"-"+j]));
+  return {A,...analyze(A)};
+}
+
+/* ---------- state ---------- */
+function freshState(){ const g={}; for(const G of GROUPS) g[G.id]={rank:G.items.map((_,i)=>i),s:{},blocked:0,override:false}; return {step:0,info:{name:"",org:"",sector:""},g,submitted:false}; }
+let S = freshState();
+try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(d && d.g && d.info) S={...S,...d}; }catch(e){}
+function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY,JSON.stringify(S)); }catch(e){} }
+
+let TOKEN = null;
+try{ TOKEN = localStorage.getItem("ahp-farm-token"); if(!TOKEN){ TOKEN = "r-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8); localStorage.setItem("ahp-farm-token",TOKEN); } }catch(e){ TOKEN = "r-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8); }
+const $ = id => document.getElementById(id);
+const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag); for(const [k,v] of Object.entries(attrs)){ if(k==="class") e.className=v; else if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else if(v===true) e.setAttribute(k,""); else if(v!==false && v!=null) e.setAttribute(k,v); } for(const k of kids.flat()){ if(k==null) continue; e.append(k.nodeType?k:document.createTextNode(String(k))); } return e; };
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2400); }
+const fmt = (x,d=3) => Number.isFinite(x)?x.toFixed(d):"–";
+
+/* ---------- survey render ---------- */
+function rail(){ return el("div",{class:"rail"}, STEPS.map((s,i)=>el("span",{class:i===S.step?"on":i<S.step?"done":""},s))); }
+
+function renderSurvey(){
+  const root=$("survey"); root.replaceChildren();
+  const box=el("div",{class:"wrap",style:"gap:16px"}); root.append(box);
+  if(S.submitted){ box.append(doneView()); return; }
+  box.append(rail());
+  if(S.step===0) box.append(introView());
+  else if(S.step<=GROUPS.length) box.append(groupView(GROUPS[S.step-1]));
+  else box.append(reviewView());
+}
+
+function introView(){
+  const c=el("div",{class:"card"});
+  c.append(
+    el("p",{},"본 설문은 개별 농가의 환경·경제·사회 부문 가치를 평가하기 위해, 각 평가 요소의 상대적 중요도(가중치)를 전문가 판단으로 산출하는 AHP(계층분석법) 조사입니다."),
+    el("p",{class:"muted small"},"두 요소를 짝지어 어느 쪽이 얼마나 더 중요한지 고르시면 됩니다. 비교 묶음은 4개, 문항은 모두 15개이며 약 10분이 걸립니다. 응답이 서로 모순되면 화면에서 바로 알려드립니다."),
+  );
+  const key=el("div",{class:"field"}, el("span",{class:"eyebrow"},"척도 읽는 법"),
+    el("div",{class:"scalekey"}, ["1 동등","3 약간 더","5 상당히 더","7 매우 더","9 절대적으로 더"].map(t=>el("div",{},t))),
+    el("p",{class:"muted small"},"2·4·6·8은 그 사이 값입니다. 가운데(1)에서 더 중요한 쪽으로 갈수록 숫자가 커집니다."),
+    el("p",{class:"small"},el("b",{},"숫자는 '몇 배'라는 뜻이라 서로 곱해집니다. "),"A가 B보다 3, B가 C보다 3이면 A는 C보다 9가 되어야 합니다. 1위와 2위처럼 이웃한 순위끼리는 작은 숫자를 쓰시면 응답이 서로 잘 맞습니다."));
+  const name=el("input",{type:"text",id:"in-name",value:S.info.name,autocomplete:"name",oninput:e=>{S.info.name=e.target.value;saveDraft();check();}});
+  const org=el("input",{type:"text",id:"in-org",value:S.info.org,oninput:e=>{S.info.org=e.target.value;saveDraft();}});
+  const seg=el("div",{class:"seg",role:"group","aria-label":"소속 구분"}, ["산업계","학계","연구기관","공공·행정","기타"].map(v=>el("button",{type:"button","aria-pressed":String(S.info.sector===v),onclick:()=>{S.info.sector=v;saveDraft();renderSurvey();}},v)));
+  const next=el("button",{class:"btn",id:"btn-next0",onclick:()=>{S.step=1;saveDraft();renderSurvey();window.scrollTo(0,0);}},"설문 시작");
+  function check(){ next.disabled=!(S.info.name.trim() && S.info.sector); }
+  check();
+  c.append(key,
+    el("div",{class:"field"},el("label",{for:"in-name"},"성함"),name),
+    el("div",{class:"field"},el("label",{for:"in-org"},"소속 기관 (선택)"),org),
+    el("div",{class:"field"},el("label",{},"소속 구분"),seg),
+    el("div",{class:"btns"},el("span",{class:"muted small"},"응답은 연구 목적으로만 사용됩니다."),next));
+  return c;
+}
+
+function groupView(g){
+  const gs=S.g[g.id], n=g.items.length;
+  const c=el("div",{class:"card"});
+  c.append(el("div",{class:"field",style:"gap:2px"},
+    el("span",{class:"eyebrow"},`${S.step} / ${GROUPS.length} · 상위 요소: ${g.parent}`),
+    el("h2",{},g.title)));
+
+  // ranking
+  const ol=el("ol");
+  gs.rank.forEach((idx,pos)=>{
+    ol.append(el("li",{},
+      el("span",{class:"pos"},`${pos+1}위`), el("span",{class:"name"},g.items[idx]),
+      el("button",{type:"button","aria-label":`${g.items[idx]} 위로`,disabled:pos===0,onclick:()=>{const r=gs.rank;[r[pos-1],r[pos]]=[r[pos],r[pos-1]];saveDraft();renderSurvey();}},"↑"),
+      el("button",{type:"button","aria-label":`${g.items[idx]} 아래로`,disabled:pos===n-1,onclick:()=>{const r=gs.rank;[r[pos+1],r[pos]]=[r[pos],r[pos+1]];saveDraft();renderSurvey();}},"↓")));
+  });
+  c.append(el("div",{class:"rank"}, el("p",{class:"small"},el("b",{},"먼저 중요한 순서대로 정렬해 주세요. "),el("span",{class:"muted"},"아래 비교는 이 순서대로, 순위가 높은 요소를 왼쪽에 두고 나옵니다.")), ol));
+
+  c.append(el("p",{style:"font-weight:500"},g.q));
+  const res=groupResult(g,gs);
+  const bad = res && res.CR>0.1 ? worstPair(res.A,res.w) : null;
+  const rankPos = {}; gs.rank.forEach((idx,p)=>rankPos[idx]=p);
+
+  // 순위대로 정렬: 이웃한 순위끼리 먼저, 먼 순위는 나중에. 왼쪽에는 늘 순위가 높은 요소를 둔다.
+  const order = pairs(n).map(([i,j])=>{ const flip=rankPos[i]>rankPos[j]; return {i,j,flip,L:flip?j:i,R:flip?i:j,dist:Math.abs(rankPos[i]-rankPos[j]),pos:Math.min(rankPos[i],rankPos[j])}; })
+    .sort((a,b)=>a.dist-b.dist||a.pos-b.pos);
+  const ratio=(x,y)=>{ const a=Math.min(x,y), b=Math.max(x,y), s=gs.s[a+"-"+b]; if(!s) return null; const v=sToA(s); return x===a?v:1/v; };
+
+  for(const q of order){
+    const {i,j,flip,L,R}=q;
+    const key=i+"-"+j, cur=gs.s[key];
+    const dcur = cur ? (flip?18-cur:cur) : null;
+    const setK = k => { gs.s[key]= flip?18-k:k; saveDraft(); renderSurvey(); };
+    const isBad = bad && bad.i===i && bad.j===j;
+    const scale=el("div",{class:"scale",role:"radiogroup","aria-label":`${g.items[L]} 대 ${g.items[R]}`});
+    for(let k=1;k<=17;k++){
+      const v = k<=9 ? 10-k : k-8;
+      scale.append(el("button",{type:"button",class:(v%2?"odd ":"")+(k===9?"mid":""),"aria-pressed":String(dcur===k),
+        "aria-label": v===1?"동등":(k<9?`${g.items[L]} ${v}`:`${g.items[R]} ${v}`), onclick:()=>setK(k)}, v));
+    }
+    let read="";
+    if(dcur){ const v=dcur<=9?10-dcur:dcur-8; read = v===1 ? "두 요소가 동등하게 중요" : `${dcur<9?g.items[L]:g.items[R]}이(가) ${INTENSITY[v]} 중요 (${v})`; }
+    const p=el("div",{class:"pair"+(isBad?" bad":"")},
+      el("div",{class:"ends"},el("span",{},`← ${g.items[L]}`),el("span",{},`${g.items[R]} →`)),
+      scale, el("div",{class:"readout"},read));
+    if(dcur && dcur>9) p.append(el("div",{class:"hint"},"위에서 정한 순위와 반대 방향입니다. 의도하신 것이 맞는지 확인해 주세요."));
+
+    // 다른 문항의 응답으로 본 이 비교의 '자연스러운' 값
+    const others=[...Array(n).keys()].filter(k=>k!==i&&k!==j);
+    const chain=others.map(k=>{ const a=ratio(L,k), b=ratio(k,R); return a&&b?a*b:null; }).filter(x=>x);
+    const imp = chain.length===others.length ? Math.exp(chain.reduce((acc,x)=>acc+Math.log(x),0)/chain.length) : null;
+    if(imp){
+      const ts=aToS(imp), tv=ts<=9?10-ts:ts-8;
+      const impTxt = tv===1 ? "두 요소가 비슷하게 중요" : `${ts<9?g.items[L]:g.items[R]}이(가) ${tv} 정도 더 중요`;
+      const lab = tv===1 ? "동등(1)" : `${ts<9?g.items[L]:g.items[R]} ${tv}`;
+      const fixBtn = el("div",{},el("button",{type:"button",class:"btn ghost",style:"padding:4px 12px;font-size:.85rem",onclick:()=>setK(ts)},`${lab}(으)로 정하기`));
+      if(imp>9.5 && q.dist>=2){
+        p.append(el("div",{class:"hint"},`앞의 응답대로라면 ${g.items[L]}이(가) ${g.items[R]}보다 약 ${Math.round(imp)}배 중요해야 하는데, 척도는 9까지라 맞출 수 없어요. 위쪽 이웃한 순위끼리의 비교 숫자를 조금 줄여 주세요.`));
+      } else if(isBad){
+        const flipDir = (dcur<9 && ts>9) || (dcur>9 && ts<9);
+        p.append(el("div",{class:"hint"},`다른 문항의 응답대로라면 ${impTxt}해야 자연스럽습니다. ${flipDir?"지금은 방향이 반대로 선택되어 있어요.":"지금 선택과 정도 차이가 커요."}`), fixBtn);
+      } else if(q.dist>=2 && !cur){
+        p.append(el("div",{class:"readout"},`참고: 위의 응답대로라면 ${impTxt}합니다.`), fixBtn);
+      }
+    }
+    c.append(p);
+  }
+
+  // status
+  const answered=pairs(n).filter(([i,j])=>gs.s[i+"-"+j]).length, total=pairs(n).length;
+  let status;
+  if(!res) status=el("div",{class:"status wait"},`${answered} / ${total} 문항 응답`);
+  else if(res.CR<=0.1) status=el("div",{class:"status ok"},el("span",{},el("b",{},"일관성 양호 "),el("span",{class:"num"},`CR ${fmt(res.CR)}`)),el("span",{class:"small muted"},"응답들이 서로 잘 맞습니다."));
+  else status=el("div",{class:"status bad"},el("span",{},el("b",{},"일관성 부족 "),el("span",{class:"num"},`CR ${fmt(res.CR)} (기준 0.1 이하)`)),
+    el("span",{class:"small"},"예를 들어 A가 B보다, B가 C보다 중요하다고 하셨다면 A는 C보다 더 중요해야 합니다. 표시된 문항을 바꾸거나, 다른 문항을 고쳐도 됩니다."));
+  c.append(status);
+
+  const back=el("button",{class:"btn ghost",onclick:()=>{S.step--;saveDraft();renderSurvey();window.scrollTo(0,0);}},"이전");
+  const next=el("button",{class:"btn",disabled:!res},"다음");
+  const right=el("div",{class:"btns",style:"justify-content:flex-end"});
+  next.onclick=()=>{
+    if(res.CR>0.1 && !gs.override){ gs.blocked++; saveDraft(); renderSurvey(); toast("표시된 문항을 다시 검토해 주세요"); return; }
+    if(res.CR<=0.1) gs.override=false;
+    S.step++; saveDraft(); renderSurvey(); window.scrollTo(0,0);
+  };
+  if(res && res.CR>0.1 && gs.blocked>0){
+    right.append(el("button",{class:"btn link",onclick:()=>{gs.override=true;S.step++;saveDraft();renderSurvey();window.scrollTo(0,0);}},"검토했습니다. 현재 응답으로 진행"));
+  }
+  right.append(next);
+  c.append(el("div",{class:"btns"},back,right));
+  return c;
+}
+
+function reviewView(){
+  const c=el("div",{class:"card"});
+  c.append(el("h2",{},"응답 확인"), el("p",{class:"muted small"},"아래는 응답으로 계산된 본인의 가중치입니다. 수정하려면 해당 단계로 돌아가세요."));
+  GROUPS.forEach((g,gi)=>{
+    const r=groupResult(g,S.g[g.id]);
+    const tb=el("table",{},el("tr",{},el("th",{},g.title),el("th",{class:"r"},"가중치"),el("th",{})));
+    g.items.forEach((it,i)=>tb.append(el("tr",{},el("td",{},it),el("td",{class:"r num"},fmt(r.w[i])),el("td",{style:"width:45%"},el("div",{class:"bar"},el("i",{style:`width:${(r.w[i]*100).toFixed(1)}%`}))))));
+    const pill = r.CR<=0.1?el("span",{class:"pill ok"},`CR ${fmt(r.CR)}`):el("span",{class:"pill bad"},`CR ${fmt(r.CR)}`);
+    c.append(el("div",{class:"field"},el("div",{class:"btns"},pill,el("button",{class:"btn ghost",style:"padding:4px 12px",onclick:()=>{S.step=gi+1;saveDraft();renderSurvey();}},"수정")),el("div",{class:"tablewrap"},tb)));
+  });
+  const msg=el("div",{});
+  const submit=el("button",{class:"btn",id:"btn-submit"},"제출하기");
+  submit.onclick=async()=>{
+    submit.disabled=true; submit.textContent="제출 중…";
+    const payload=buildPayload();
+    let ok=false;
+    try{
+      const res = await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify({...payload,token:TOKEN})});
+      const out = await res.json(); ok = !!(out && out.ok);
+    }catch(e){ ok=false; }
+    S.submitted=true; S.via= ok ? "db" : "code"; if(!ok) S.code=encodePayload({...payload,token:TOKEN});
+    saveDraft(); renderSurvey(); window.scrollTo(0,0);
+  };
+  c.append(msg, el("div",{class:"btns"},el("button",{class:"btn ghost",onclick:()=>{S.step--;saveDraft();renderSurvey();}},"이전"),submit));
+  return c;
+}
+
+function buildPayload(){
+  const groups={};
+  for(const g of GROUPS){ const gs=S.g[g.id], r=groupResult(g,gs); groups[g.id]={s:{...gs.s},rank:[...gs.rank],cr:+r.CR.toFixed(4),override:!!gs.override,blocked:gs.blocked}; }
+  return {schema:1,name:S.info.name.trim(),org:S.info.org.trim(),sector:S.info.sector,groups,submittedAt:new Date().toISOString()};
+}
+const encodePayload = p => "AHP1:"+btoa(unescape(encodeURIComponent(JSON.stringify(p))));
+function decodePayload(t){ t=t.trim(); if(!t.startsWith("AHP1:")) throw new Error("형식"); return JSON.parse(decodeURIComponent(escape(atob(t.slice(5))))); }
+
+function doneView(){
+  const c=el("div",{class:"card"});
+  if(S.via==="db"){
+    c.append(el("h2",{},"제출되었습니다"),el("p",{},`${S.info.name} 님, 응답해 주셔서 감사합니다.`),el("p",{class:"muted small"},"수정이 필요하시면 아래 버튼으로 응답을 고쳐 다시 제출하실 수 있습니다. 다시 제출하면 이전 응답을 대체합니다."));
+  } else {
+    const code=el("div",{class:"code",id:"code"},S.code);
+    const copy=el("button",{class:"btn"},"응답 코드 복사");
+    copy.onclick=async()=>{ try{ await navigator.clipboard.writeText(S.code); toast("복사했습니다"); }catch(e){ const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast("코드를 선택했습니다. 복사해 주세요"); } };
+    c.append(el("h2",{},"응답 코드를 보내 주세요"),
+      el("p",{},"네트워크 문제로 응답을 자동 저장하지 못했습니다. 아래 코드를 복사해 연구진에게 이메일이나 메신저로 보내 주시면 응답이 그대로 반영됩니다."),
+      code, el("div",{class:"btns"},el("span",{class:"muted small"},"코드에는 응답 내용이 모두 들어 있습니다."),copy));
+  }
+  c.append(el("div",{class:"btns",style:"justify-content:flex-start"},el("button",{class:"btn ghost",onclick:()=>{S.submitted=false;S.step=GROUPS.length+1;saveDraft();renderSurvey();}},"응답 수정하기")));
+  return c;
+}
+
+
+renderSurvey();
+</script>
+</body>
+</html>
