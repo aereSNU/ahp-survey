@@ -182,10 +182,13 @@ ELEMS.forEach(t=>{
   if(gs.length) ANP_SCREENS.push({title:t.name, heading:`${t.name}에 미치는 영향`, groups:gs});
 });
 { const cgs=[];
-  PILLARS.forEach(Pt=>{ const src=clusterSources(Pt); if(src.length>=2) cgs.push({id:`K.${Pt.id}`, kind:"anp", items:src.map(P=>P.name),
-    sub:`${Pt.name} 부문 요소들이 받는 영향`, title:`부문 간 영향 → ${Pt.name}`,
-    q:`${Pt.name} 부문의 요소들에 미치는 영향 측면에서, 두 부문 중 어느 쪽이 더 큰 영향을 준다고 보십니까?`}); });
-  if(cgs.length) ANP_SCREENS.push({title:"부문 간 영향", heading:"부문 간 영향", groups:cgs}); }
+  PILLARS.forEach(Pt=>{ const src=clusterSources(Pt); if(src.length>=2) cgs.push({id:`K.${Pt.id}`, kind:"anp",
+    items:src.map(P=>P.id===Pt.id ? `${P.name} 부문 내부` : `${P.name} 부문`),
+    sub:`${Pt.name} 부문의 요소들이 받는 영향`, title:`부문 간 영향 → ${Pt.name}`,
+    note:`${Pt.name} 부문의 요소: ${Pt.children.map(c=>c.name).join(", ")}. '${Pt.name} 부문 내부'는 이 요소들끼리 서로 주고받는 영향을 뜻합니다.`,
+    q:`${Pt.name} 부문의 요소들이 받는 영향을 생각할 때, 어느 쪽에서 오는 영향이 더 크다고 보십니까?`}); });
+  if(cgs.length) ANP_SCREENS.push({title:"부문 간 영향", heading:"부문 간 영향", groups:cgs,
+    intro:"앞에서는 같은 부문 안의 요소끼리 영향을 비교했습니다. 여기서는 한 부문의 요소들이 받는 영향 가운데, 어느 부문에서 오는 영향이 더 큰지를 비교합니다. 예를 들어 경제 부문의 요소들이 환경 요소들에게서 받는 영향과 사회 요소들에게서 받는 영향 중 어느 쪽이 더 큰지를 묻습니다."}); }
 const SCREENS = [
   ...GROUPS.map(g=>({title:g.title, heading:g.title, eyebrow:`중요도 비교 · 상위 항목: ${g.parentLabel}`, groups:[g]})),
   ...ANP_SCREENS.map((sc,i)=>({...sc, anp:true, first:i===0, eyebrow:"영향 비교"}))];
@@ -308,7 +311,9 @@ function groupBlock(g, showSub){
   const gs=S.g[g.id], n=g.items.length, anp=g.kind==="anp";
   const box=el("div",{class:"field",style:"gap:12px"});
   if(showSub) box.append(el("h3",{class:"sub"},g.sub));
-  box.append(el("p",{style:"font-weight:500"},g.q), el("p",{class:"muted small"},"9 극히 · 7 매우 · 5 상당히 · 3 약간 · 1 동등"));
+  box.append(el("p",{style:"font-weight:500"},g.q));
+  if(g.note) box.append(el("p",{class:"small muted"},g.note));
+  box.append(el("p",{class:"muted small"},"9 극히 · 7 매우 · 5 상당히 · 3 약간 · 1 동등"));
   const res=groupResult(g,gs);
   const bad = res && res.CR>0.1 ? worstPair(res.A,res.w) : null;
   for(const [i,j] of pairs(n)){
@@ -351,6 +356,7 @@ function screenView(sc){
     el("b",{},"2부: 영향 비교"),
     el("p",{class:"small"},"여기부터는 중요도가 아니라 '영향의 크기'를 묻습니다. 사전 조사(DEMATEL)에서 서로 영향이 있다고 나타난 관계만 비교합니다."),
     el("p",{class:"small"},"예: [수익성]에 미치는 영향 측면에서 토양과 수질을 비교하는 문항은, 토양과 수질 가운데 어느 쪽이 수익성을 더 크게 좌우하는지를 묻는 것입니다.")));
+  if(sc.intro) c.append(el("div",{class:"note"},el("p",{class:"small"},sc.intro)));
   const blocks=sc.groups.map(g=>({g,...groupBlock(g, sc.groups.length>1)}));
   blocks.forEach((b,k)=>{ if(k>0) c.append(el("hr",{class:"sep"})); c.append(b.box); });
   const allDone=blocks.every(b=>b.res);
