@@ -118,6 +118,9 @@ td.r,th.r{text-align:right}
 .wrow{display:grid;grid-template-columns:minmax(80px,9em) 1fr 4em;gap:10px;align-items:center}
 .wrow .wname{font-size:.88rem;min-width:0}
 tr.strong td{font-weight:600}
+.note{background:var(--accent-weak);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+h3.sub{font-size:1rem;margin:0;color:var(--accent);font-weight:600}
+hr.sep{border:0;border-top:2px solid var(--line);margin:4px 0;width:100%}
 </style>
 </head>
 <body>
@@ -156,10 +159,43 @@ const GROUPS = [];
                             : `'${n.name}'을(를) 평가할 때, 두 요소 중 어느 쪽이 더 중요하다고 보십니까?`)});
   } (n.children||[]).forEach(collect); })(TREE);
 
+GROUPS.forEach(g=>{ g.kind="ahp"; });
+
+/* ===== ANP 영향 관계 (DEMATEL 유의관계) =====
+   "A>B"는 A가 B에 유의한 영향을 준다는 뜻입니다. 본설문 DEMATEL 결과가 나오면 이 목록만 바꾸면 문항이 다시 만들어집니다.
+   Code.gs의 LINKS도 똑같이 맞춰 주세요.
+   E1 토양 · E2 수질 · E3 대기 · E4 생태 · S1 인적 기반 · S2 영농 활동 기반 · S3 지역사회 기반 · C1 수익성 · C2 생산성 · C3 안정성 */
+const LINKS = "E1>E2 E1>E3 E1>E4 E1>S2 E1>C1 E1>C2 E1>C3 E2>E1 E2>E4 E2>S2 E2>C1 E2>C2 E2>C3 E4>C1 S1>E1 S1>S2 S1>S3 S1>C1 S1>C2 S1>C3 S2>C1 S2>C2 S3>S1 S3>S2 S3>C1 S3>C2 S3>C3 C1>S1 C1>S2 C1>S3 C1>C2 C1>C3 C2>S2 C2>C1 C2>C3 C3>S2 C3>C1 C3>C2";
+
+const PILLARS = TREE.children;
+const ELEMS = PILLARS.flatMap(p=>p.children);
+const LINK = LINKS.trim().split(/\s+/).map(x=>x.split(">"));
+const hasLink = (a,b) => LINK.some(([x,y])=>x===a&&y===b);
+const sourcesIn = (t,P) => P.children.filter(c=>c.id!==t.id && hasLink(c.id,t.id));
+const clusterSources = Pt => PILLARS.filter(P=>Pt.children.some(t=>sourcesIn(t,P).length>0));
+const ANP_SCREENS = [];
+ELEMS.forEach(t=>{
+  const gs=[];
+  PILLARS.forEach(P=>{ const src=sourcesIn(t,P); if(src.length>=2) gs.push({id:`N.${t.id}.${P.id}`, kind:"anp", items:src.map(c=>c.name),
+    sub:`${P.name} 부문 요소 사이의 비교`, title:`${t.name} ← ${P.name}`,
+    q:`[${t.name}]에 미치는 영향 측면에서, 두 요소 중 어느 쪽이 더 큰 영향을 준다고 보십니까?`}); });
+  if(gs.length) ANP_SCREENS.push({title:t.name, heading:`${t.name}에 미치는 영향`, groups:gs});
+});
+{ const cgs=[];
+  PILLARS.forEach(Pt=>{ const src=clusterSources(Pt); if(src.length>=2) cgs.push({id:`K.${Pt.id}`, kind:"anp", items:src.map(P=>P.name),
+    sub:`${Pt.name} 부문 요소들이 받는 영향`, title:`부문 간 영향 → ${Pt.name}`,
+    q:`${Pt.name} 부문의 요소들에 미치는 영향 측면에서, 두 부문 중 어느 쪽이 더 큰 영향을 준다고 보십니까?`}); });
+  if(cgs.length) ANP_SCREENS.push({title:"부문 간 영향", heading:"부문 간 영향", groups:cgs}); }
+const SCREENS = [
+  ...GROUPS.map(g=>({title:g.title, heading:g.title, eyebrow:`중요도 비교 · 상위 항목: ${g.parentLabel}`, groups:[g]})),
+  ...ANP_SCREENS.map((sc,i)=>({...sc, anp:true, first:i===0, eyebrow:"영향 비교"}))];
+const ALLGROUPS = SCREENS.flatMap(sc=>sc.groups);
+const SCREEN_OF = {}; SCREENS.forEach((sc,i)=>sc.groups.forEach(g=>SCREEN_OF[g.id]=i+1));
+
 const RI = [0,0,0,0.58,0.90,1.12,1.24,1.32,1.41,1.45,1.49,1.51,1.48,1.56,1.57,1.59];
 const INTENSITY = {1:"동등하게",2:"동등~약간 더",3:"약간 더",4:"약간~상당히 더",5:"상당히 더",6:"상당히~매우 더",7:"매우 더",8:"매우~극히 더",9:"극히 더"};
-const STEPS = ["시작", ...GROUPS.map(g=>g.title), "확인"];
-const DRAFT_KEY = "ahp-farm-draft-v2";
+const STEPS = ["시작", ...SCREENS.map(sc=>sc.title), "확인"];
+const DRAFT_KEY = "ahp-farm-draft-v3";
 
 /* ---------- AHP 계산 ---------- */
 const pairs = n => { const p=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) p.push([i,j]); return p; };
@@ -188,9 +224,9 @@ function globalWeights(groupsState){
 }
 
 /* ---------- 상태 ---------- */
-function freshState(){ const g={}; for(const G of GROUPS) g[G.id]={s:{},blocked:0,override:false}; return {step:0,evaluator:"",g,submitted:false}; }
+function freshState(){ const g={}; for(const G of ALLGROUPS) g[G.id]={s:{},blocked:0,override:false}; return {step:0,evaluator:"",g,submitted:false}; }
 let S = freshState();
-try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(d && d.g){ S={...S,...d}; for(const G of GROUPS) if(!S.g[G.id]) S.g[G.id]=freshState().g[G.id]; } }catch(e){}
+try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(d && d.g){ S={...S,...d}; for(const G of ALLGROUPS) if(!S.g[G.id]) S.g[G.id]=freshState().g[G.id]; } }catch(e){}
 function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY,JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
@@ -241,18 +277,19 @@ function render(){
   if(S.submitted){ root.append(doneView()); return; }
   root.append(rail());
   if(S.step===0) root.append(introView());
-  else if(S.step<=GROUPS.length) root.append(groupView(GROUPS[S.step-1]));
+  else if(S.step<=SCREENS.length) root.append(screenView(SCREENS[S.step-1]));
   else root.append(reviewView());
 }
 
 function introView(){
   const c=el("div",{class:"card"});
-  const total=GROUPS.reduce((a,g)=>a+pairs(g.items.length).length,0);
+  const cnt = gs => gs.reduce((a,g)=>a+pairs(g.items.length).length,0);
+  const nA=cnt(GROUPS), nN=cnt(ALLGROUPS.filter(g=>g.kind==="anp"));
   c.append(
-    el("p",{},"본 설문은 개별 농가의 환경·사회·경제 부문 가치를 평가하기 위해, 각 평가 요소의 상대적 중요도(가중치)를 전문가 판단으로 산출하는 AHP(계층분석법) 조사입니다."),
+    el("p",{},"본 설문은 개별 농가의 환경·사회·경제 부문 가치를 평가하기 위해, 각 평가 요소의 상대적 중요도와 요소 사이의 영향 관계를 전문가 판단으로 산출하는 AHP(계층분석법)·ANP(네트워크분석법) 조사입니다."),
     el("h2",{},"평가 계층"),
     hierarchySVG(),
-    el("p",{class:"muted small"},`같은 상위 항목 아래의 요소끼리 두 개씩 짝지어 비교합니다. 비교 묶음은 ${GROUPS.length}개, 문항은 모두 ${total}개입니다. 응답하신 값으로 계산한 하위 요소의 가중치는 상위 항목의 가중치와 곱해져 최종 가중치가 됩니다.`),
+    el("p",{class:"muted small"},`설문은 두 부분으로 되어 있습니다. 1부(${nA}문항)에서는 같은 상위 항목 아래의 요소끼리 어느 쪽이 더 중요한지 비교합니다. 2부(${nN}문항)에서는 서로 영향을 주고받는 요소끼리 어느 쪽이 더 큰 영향을 주는지 비교합니다. 모두 ${nA+nN}문항입니다.`),
   );
   c.append(el("div",{class:"field"}, el("span",{class:"eyebrow"},"척도 읽는 법"),
     el("div",{class:"scalekey"}, ["1 동등","3 약간 더","5 상당히 더","7 매우 더","9 극히 더"].map(t=>el("div",{},t))),
@@ -267,54 +304,67 @@ function introView(){
   return c;
 }
 
-function groupView(g){
-  const gs=S.g[g.id], n=g.items.length;
-  const c=el("div",{class:"card"});
-  c.append(el("div",{class:"field",style:"gap:2px"},
-    el("span",{class:"eyebrow"},`${S.step} / ${GROUPS.length} · 상위 항목: ${g.parentLabel}`), el("h2",{},g.title)));
-
-  c.append(el("p",{style:"font-weight:500"},g.q), el("p",{class:"muted small"},"9 극히 · 7 매우 · 5 상당히 · 3 약간 · 1 동등"));
+function groupBlock(g, showSub){
+  const gs=S.g[g.id], n=g.items.length, anp=g.kind==="anp";
+  const box=el("div",{class:"field",style:"gap:12px"});
+  if(showSub) box.append(el("h3",{class:"sub"},g.sub));
+  box.append(el("p",{style:"font-weight:500"},g.q), el("p",{class:"muted small"},"9 극히 · 7 매우 · 5 상당히 · 3 약간 · 1 동등"));
   const res=groupResult(g,gs);
   const bad = res && res.CR>0.1 ? worstPair(res.A,res.w) : null;
   for(const [i,j] of pairs(n)){
-    const L=i, R=j, key=i+"-"+j, cur=gs.s[key], dcur=cur||null;
+    const key=i+"-"+j, cur=gs.s[key];
     const setK = k => { gs.s[key]=k; saveDraft(); render(); };
     const isBad = bad && bad.i===i && bad.j===j;
-    const scale=el("div",{class:"scale",role:"radiogroup","aria-label":`${g.items[L]} 대 ${g.items[R]}`});
+    const scale=el("div",{class:"scale",role:"radiogroup","aria-label":`${g.items[i]} 대 ${g.items[j]}`});
     for(let k=1;k<=17;k++){ const v=k<=9?10-k:k-8;
-      scale.append(el("button",{type:"button",class:(v%2?"odd ":"")+(k===9?"mid":""),"aria-pressed":String(dcur===k),
-        "aria-label":v===1?"동등":(k<9?`${g.items[L]} ${v}`:`${g.items[R]} ${v}`),onclick:()=>setK(k)},v)); }
+      scale.append(el("button",{type:"button",class:(v%2?"odd ":"")+(k===9?"mid":""),"aria-pressed":String(cur===k),
+        "aria-label":v===1?"동등":(k<9?`${g.items[i]} ${v}`:`${g.items[j]} ${v}`),onclick:()=>setK(k)},v)); }
     let read="";
-    if(dcur){ const v=dcur<=9?10-dcur:dcur-8; read = v===1 ? "두 요소가 동등하게 중요" : `${dcur<9?g.items[L]:g.items[R]}이(가) ${INTENSITY[v]} 중요 (${v})`; }
+    if(cur){ const v=cur<=9?10-cur:cur-8; const who=cur<9?g.items[i]:g.items[j];
+      read = v===1 ? (anp?"두 요소의 영향이 비슷함":"두 요소가 동등하게 중요") : `${who}이(가) ${INTENSITY[v]} ${anp?"큰 영향을 줌":"중요"} (${v})`; }
     const p=el("div",{class:"pair"+(isBad?" bad":"")},
-      el("div",{class:"ends"},el("span",{},`← ${g.items[L]}`),el("span",{},`${g.items[R]} →`)), scale, el("div",{class:"readout"},read));
+      el("div",{class:"ends"},el("span",{},`← ${g.items[i]}`),el("span",{},`${g.items[j]} →`)), scale, el("div",{class:"readout"},read));
     if(isBad){
-      const natural = bad.target>=1 ? i : j;          // 나머지 응답이 가리키는 더 중요한 쪽
+      const natural = bad.target>=1 ? i : j;
       const chosen  = cur<9 ? i : cur>9 ? j : -1;
       const msg = chosen!==-1 && chosen!==natural ? "다른 문항의 응답과 비교하면 이 문항의 방향이 반대로 보입니다." : "다른 문항의 응답과 가장 크게 어긋나는 문항입니다.";
       p.append(el("div",{class:"hint"},`${msg} 이 문항이나 관련된 다른 문항을 다시 검토해 주세요.`));
     }
-    c.append(p);
+    box.append(p);
   }
-
   const answered=pairs(n).filter(([i,j])=>gs.s[i+"-"+j]).length, total=pairs(n).length;
   let status;
   if(!res) status=el("div",{class:"status wait"},`${answered} / ${total} 문항 응답`);
   else if(n<=2) status=el("div",{class:"status ok"},el("b",{},"응답 완료"));
   else if(res.CR<=0.1) status=el("div",{class:"status ok"},el("span",{},el("b",{},"일관성 양호 "),el("span",{class:"num"},`CR ${fmt(res.CR)}`)));
   else status=el("div",{class:"status bad"},el("span",{},el("b",{},"일관성 부족 "),el("span",{class:"num"},`CR ${fmt(res.CR)} (기준 0.1 이하)`)),
-    el("span",{class:"small"},"A가 B보다, B가 C보다 중요하다고 하셨다면 A는 C보다 더 중요해야 자연스럽습니다. 표시된 문항을 중심으로 응답을 다시 살펴봐 주세요."));
-  c.append(status);
+    el("span",{class:"small"},`A가 B보다, B가 C보다 ${anp?"영향이 크다":"중요하다"}고 하셨다면 A는 C보다 더 ${anp?"영향이 커야":"중요해야"} 자연스럽습니다. 표시된 문항을 중심으로 응답을 다시 살펴봐 주세요.`));
+  box.append(status);
+  return {box, res, bad: res && n>2 && res.CR>0.1};
+}
 
-  const next=el("button",{class:"btn",disabled:!res},"다음");
+function screenView(sc){
+  const c=el("div",{class:"card"});
+  c.append(el("div",{class:"field",style:"gap:2px"},
+    el("span",{class:"eyebrow"},`${S.step} / ${SCREENS.length} · ${sc.eyebrow}`), el("h2",{},sc.heading)));
+  if(sc.first) c.append(el("div",{class:"note"},
+    el("b",{},"2부: 영향 비교"),
+    el("p",{class:"small"},"여기부터는 중요도가 아니라 '영향의 크기'를 묻습니다. 사전 조사(DEMATEL)에서 서로 영향이 있다고 나타난 관계만 비교합니다."),
+    el("p",{class:"small"},"예: [수익성]에 미치는 영향 측면에서 토양과 수질을 비교하는 문항은, 토양과 수질 가운데 어느 쪽이 수익성을 더 크게 좌우하는지를 묻는 것입니다.")));
+  const blocks=sc.groups.map(g=>({g,...groupBlock(g, sc.groups.length>1)}));
+  blocks.forEach((b,k)=>{ if(k>0) c.append(el("hr",{class:"sep"})); c.append(b.box); });
+  const allDone=blocks.every(b=>b.res);
+  const badOnes=blocks.filter(b=>b.bad);
+  const needFix=badOnes.filter(b=>!S.g[b.g.id].override);
+  const next=el("button",{class:"btn",disabled:!allDone},"다음");
   next.onclick=()=>{
-    if(n>2 && res.CR>0.1 && !gs.override){ gs.blocked++; saveDraft(); render(); toast("표시된 문항을 다시 검토해 주세요"); return; }
-    if(res.CR<=0.1) gs.override=false;
+    if(needFix.length){ needFix.forEach(b=>S.g[b.g.id].blocked++); saveDraft(); render(); toast("표시된 문항을 다시 검토해 주세요"); return; }
+    blocks.forEach(b=>{ if(!b.bad) S.g[b.g.id].override=false; });
     go(S.step+1);
   };
   const right=el("div",{class:"btns",style:"justify-content:flex-end"});
-  if(res && n>2 && res.CR>0.1 && gs.blocked>0)
-    right.append(el("button",{class:"btn link",onclick:()=>{gs.override=true;go(S.step+1);}},"검토했습니다. 현재 응답으로 진행"));
+  if(allDone && needFix.length && needFix.every(b=>S.g[b.g.id].blocked>0))
+    right.append(el("button",{class:"btn link",onclick:()=>{needFix.forEach(b=>S.g[b.g.id].override=true);go(S.step+1);}},"검토했습니다. 현재 응답으로 진행"));
   right.append(next);
   c.append(el("div",{class:"btns"},el("button",{class:"btn ghost",onclick:()=>go(S.step-1)},"이전"),right));
   return c;
@@ -335,12 +385,12 @@ function weightTable(gw){
 
 function reviewView(){
   const c=el("div",{class:"card"});
-  c.append(el("h2",{},"응답 확인"), el("p",{class:"muted small"},"응답으로 계산된 본인의 가중치입니다. 최종 가중치는 상위 항목의 가중치에 상위 항목 안 비중을 곱한 값이며, 맨 아래 요소의 최종 가중치를 모두 더하면 1이 됩니다."));
+  c.append(el("h2",{},"응답 확인"), el("p",{class:"muted small"},"1부 응답으로 계산된 본인의 중요도 가중치입니다. 최종 가중치는 상위 항목의 가중치에 상위 항목 안 비중을 곱한 값이며, 맨 아래 요소의 최종 가중치를 모두 더하면 1이 됩니다."));
   c.append(weightTable(globalWeights(S.g)));
   const crList=el("div",{class:"btns",style:"justify-content:flex-start;gap:6px"});
-  GROUPS.forEach((g,gi)=>{ const r=groupResult(g,S.g[g.id]); const ok=g.items.length<=2||r.CR<=0.1;
-    crList.append(el("button",{class:"pill "+(ok?"ok":"bad"),style:"border:0;cursor:pointer",onclick:()=>go(gi+1)},`${g.title}${g.items.length>2?" · CR "+fmt(r.CR):""}`)); });
-  c.append(el("div",{class:"field"},el("span",{class:"eyebrow"},"묶음별 일관성 (누르면 수정)"),crList));
+  ALLGROUPS.filter(g=>g.items.length>2).forEach(g=>{ const r=groupResult(g,S.g[g.id]); const ok=r.CR<=0.1;
+    crList.append(el("button",{class:"pill "+(ok?"ok":"bad"),style:"border:0;cursor:pointer",onclick:()=>go(SCREEN_OF[g.id])},`${g.title} · CR ${fmt(r.CR)}`)); });
+  c.append(el("div",{class:"field"},el("span",{class:"eyebrow"},"비교 요소가 3개 이상인 묶음의 일관성 (누르면 수정)"),crList));
   const submit=el("button",{class:"btn"},"제출하기");
   submit.onclick=async()=>{
     submit.disabled=true; submit.textContent="제출 중…";
@@ -355,8 +405,8 @@ function reviewView(){
 
 function buildPayload(){
   const groups={};
-  for(const g of GROUPS){ const gs=S.g[g.id], r=groupResult(g,gs); groups[g.id]={s:{...gs.s},cr:+r.CR.toFixed(4),override:!!gs.override,blocked:gs.blocked}; }
-  return {schema:2,evaluator:S.evaluator.trim(),groups,submittedAt:new Date().toISOString()};
+  for(const g of ALLGROUPS){ const gs=S.g[g.id], r=groupResult(g,gs); groups[g.id]={s:{...gs.s},cr:+r.CR.toFixed(4),override:!!gs.override,blocked:gs.blocked}; }
+  return {schema:3,evaluator:S.evaluator.trim(),groups,submittedAt:new Date().toISOString()};
 }
 const encodePayload = p => "AHP2:"+btoa(unescape(encodeURIComponent(JSON.stringify(p))));
 
@@ -373,7 +423,7 @@ function doneView(){
       el("p",{},"네트워크 문제로 응답을 자동 저장하지 못했습니다. 아래 코드를 복사해 연구진에게 보내 주시면 응답이 그대로 반영됩니다."),
       code, el("div",{class:"btns",style:"justify-content:flex-end"},copy));
   }
-  c.append(el("div",{class:"btns",style:"justify-content:flex-start"},el("button",{class:"btn ghost",onclick:()=>{S.submitted=false;go(GROUPS.length+1);}},"응답 수정하기")));
+  c.append(el("div",{class:"btns",style:"justify-content:flex-start"},el("button",{class:"btn ghost",onclick:()=>{S.submitted=false;go(SCREENS.length+1);}},"응답 수정하기")));
   return c;
 }
 
